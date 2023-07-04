@@ -835,4 +835,4 @@ Essas descobertas sugerem que a seleção cuidadosa de variáveis e a engenharia
 
 # Código Utilizado
 
-O código utilizado nesse trabalho, assim como os dados, podem ser acessados através do seguinte link:
+O [código](https://github.com/Gustavo039/Cars_Regression/blob/main/cars_model.R) utilizado nesse trabalho, assim como os [dados](https://github.com/Gustavo039/Cars_Regression/blob/main/train.csv), podem ser acessados através do seguinte link:  https://github.com/Gustavo039/Cars_Regression
