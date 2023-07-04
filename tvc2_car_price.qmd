@@ -1,0 +1,838 @@
+---
+title: "Análise e Modelagem de Preços de Carros Usados"
+format:
+  html:
+    theme: united
+    toc: true
+    number-sections: true
+    embed-resources: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, warning = F)
+```
+
+#  Introdução
+
+O mercado de venda de veículos usados desempenha um papel significativo na indústria automotiva. Com a crescente demanda por opções acessíveis e a busca por alternativas sustentáveis, a compra de veículos usados se tornou uma escolha popular. Este estudo busca analisar as tendências, preços e fatores que influenciam esse mercado dinâmico e em constante transformação.
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs\car.png)
+
+
+Empregou-se métodos estatísticos, como análise exploratória de dados, modelagem estatística e técnicas de previsão, para analisar e compreender este mercado. Por meio dessas abordagens, foram investigados padrões, identificados fatores relevantes e desenvolvidos modelos capazes de prever o comportamento do mercado e auxiliar na tomada de decisões informadas.
+
+# Dados Utilizados
+
+Os dados utilizados nesse trabalho foram retirados do [**Kaggle**](https://www.kaggle.com/datasets/mayankpatel14/second-hand-used-cars-data-set-linear-regression), se tratando de dados sobre o preço de carros usados. O conjunto de dados possui as seguintes variáveis:
+
+* **v.id** : Chave de identificação de cada observação
+
+* **road_old**: Refere-se ao preço original do carro ao ser comprado novo
+
+* **road_now**: Refere-se ao preço de mercado atual do carro
+
+* **years**: Representa o número de anos do carro
+
+* **km**: Refere-se a kilometragem do carro
+
+* **rating**: Representa a classificação ou pontuação atribuída ao carro com base em vários fatores, como desempenho, confiabilidade, segurança, etc. Ele fornece uma avaliação geral da qualidade do carro. Vai de 1 a 10, sendo 10 a avaliação máxima
+
+* **condition**: Indica o estado de deteriorização do carro. Indo de 1 a 10, onde 10 indica deteriorização máxima
+
+* **economy**: Representa a eficiência de combustível ou consumo de combustível do carro. Ele indica a distância que o carro pode percorrer por unidade de combustível consumido.
+
+* **top_speed**: Indica a velocidade máxima que o carro pode atingir
+
+* **hp**: Representa a potência do carro.
+
+* **torque**: Indica o torque do motor do carro. O torque representa a força rotacional produzida pelo motor, que é importante para a aceleração
+
+* **current_price**: Representa o preço listado atual ou o preço pedido para o carro usado. É o valor que o vendedor espera receber pelo carro.
+
+
+A variável **current_price** foi a variável resposta do trabalho. Assim, utilizando as demais variáveis listadas, estimou-se modelos para previsão de preço de carros usados
+
+
+
+
+# Separação e Análise Exploratória dos Dados
+
+```{r, message=FALSE, warning=F}
+library(tidyverse)
+library(tidymodels)
+
+
+df_cars = readr::read_csv('D:/UFJF_materias/Regressao/TVCs/tvc2/train.csv') |>
+  dplyr::rename('road_now' = `on road old`, 
+                'road_old' = `on road now`,
+                'top_speed' = `top speed`,
+                'current_price' = `current price`)
+```
+
+Os dados são todos do tipo numérico, onde tem-se que :
+
+
+```{r}
+df_cars |> head() |> glimpse()
+```
+
+Observando o gráfico de valores faltantes, foi visto que nenhuma variável possuia falta de dados e portanto não foi necessária a utilização de técnicas de imputação de dados
+
+```{r}
+df_cars |> visdat::vis_miss()
+```
+
+--------------------
+
+Buscando diminuir o viés amostral, o conjunto de dados será divido em treino e teste, com proporção $(0.75, \ 0.25)$, o método de divisão utilizado será de amostragem estratificada simples, tal método foi escolhido para evitar desbalanceamento de valores dos carros nos conjuntos de treino e teste. Portanto, toda a análise e modelagem realizada nos próximos tópicos foi realizada em cima do conjunto de dados de teste, ao final da etapa de modelagem foi realizado a validação do modelo, onde utilizou-se o conjunto de teste dos dados
+
+```{r}
+set.seed(123)
+
+cars_tt_split = initial_split(df_cars, prop = .75, strata = current_price)
+cars_train = training(cars_tt_split)
+cars_test = testing(cars_tt_split)
+
+```
+
+
+```{r}
+cars_train |> 
+  cor() |> 
+  ggcorrplot::ggcorrplot(hc.order = TRUE, 
+                         type = "lower",
+                         lab = TRUE,
+                         colors = c("#6D9EC1", "white", "#E46726"))
+```
+
+A partir do correlograma, observou-se que a as variáveis **road_now e road_old** possuem certo nivel de correlação positiva com a varíável de interesse **current_price**. Também observou uma forte correlação negativa com a **km** (o que é esperado dado que usualmente uma maior kilometragem de um veículo indica um menor poder de revenda)
+
+```{r}
+cars_train |>
+  pivot_longer(-current_price) |>
+  ggplot(aes(x = value, col = name)) +
+  geom_histogram() +
+  facet_wrap(~name, scales = "free") +
+  ggthemes::scale_color_tableau() +
+  theme_minimal()
+
+```
+
+Com histogramas de cada variável, viu-se que elas se apresentavam de maneira praticamente uniforme, ou seja, não havia problema de desbalanceamento nas variáveis preditoras
+
+```{r}
+
+long_data = gather(cars_train, key = "variable", value = "value") |>
+  arrange(variable, value) |>
+  mutate(index = row_number()) |>
+  mutate(value = log(value))
+
+# Create scatter plot for each variable
+ggplot(long_data, aes(x = index, y = value, col = variable)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(x = "Variable", y = "Value") +
+  ggthemes::scale_color_tableau()
+
+
+```
+
+A partir do boxplot dos log dos valores de cada variável, vemos que a variável de interesse **current_price** pode possuir
+cauda pesada, ja as demais variveis não possuem essa característica.
+
+```{r}
+cars_train |>
+  select(current_price) |>
+  ggplot(aes(x = current_price, fill = 'lightblue')) +
+  geom_histogram(bins = 25) +
+  ggthemes::scale_fill_tableau()
+```
+
+Observando o histograma da variável, sem tranformação Log(), não observou-se a presença de caudas pesadas e portanto não foi necessário a aplicação de transformações nessa variável
+
+# Modelos de Regressão
+
+## Seleção Voluntária
+
+Primeiramente, dois 2 modelos foram criados.
+
+* Modelo Saturado:
+  - O modelo utiliza todas as variáveis disponiveis no conjunto de dados como preditoras
+  
+* Modelo Correlacional
+  - O modelo utiliza apenas as variáveis com correlação acima de 0.1 juntamente com a variével **years**
+
+```{r}
+car_recipe_full = recipe(current_price ~ ., data = cars_train) |>
+  update_role(v.id, new_role = "id") |>
+  update_role(all_outcomes(), new_role = "outcome")
+
+car_recipe_sign = recipe(current_price ~ road_old + road_now + km + years, data = cars_train) 
+  
+```
+
+
+```{r}
+lm_spec = linear_reg() |>
+  set_engine('lm')
+```
+
+```{r}
+wf_full = workflow() |>
+  add_recipe(car_recipe_full) |>
+  add_model(lm_spec) 
+
+wf_sign = workflow() |>
+  add_recipe(car_recipe_sign) |>
+  add_model(lm_spec) 
+```
+
+```{r}
+full_fit = wf_full |> fit(data = cars_train) 
+sign_fit = wf_sign |> fit(data = cars_train) 
+```
+
+
+Os modelos apresentaram as seguintes estimativas para $\tilde {\beta}$
+
+```{r}
+full_fit_lm = lm(current_price ~ ., data = cars_train |> select(-v.id))
+sign_fit_lm = lm(current_price ~ road_old + road_now + km + years, data = cars_train)
+
+modelsummary::modelsummary(
+  list('Saturado' = full_fit_lm, 
+       'Correlacional' = sign_fit_lm),
+       fmt = 1,
+       estimate  = c("{estimate}{stars}",
+                     "{estimate}{stars}"
+                     ),
+       statistic = c("p = {p.value}")
+  )
+```
+
+
+Viu-se que ambos os modelos o intercepto foi significativo, assim como as variáveis: **road_now, road_now, years, km**. No modelo saturado, a variável **condition** tambem se apresentou como significativa
+
+O R-Quadrado Ajustado em ambos os modelos se mostrou extremamente alto, acima de $0.98$, tal valor pode indicar um super-ajuste por parte dos dois modelos, e portanto se mostrando como modelos com baixa generalização
+
+Os resíduos de ambos os modelos apresentaram inconsistência
+
+* Modelo Saturado
+
+```{r}
+library(performance)
+
+full_fit |> 
+  extract_fit_engine() |> 
+  check_model(check =  c("qq", "normality", "linearity", "homogeneity"))
+
+```
+
+Viu-se que os resíduos apresentavam certo padrão, onde a partir do gráfico de homogeneidade da variância, observou-se que eles se apresentavam em dois niveis distintos: acima e abaixo do valor 1. Além disso, a partir do histograma e do qqplot, observou-se a não normalidade dos resíduos, apresentando assimetria e caudas pesadas
+
+* Modelo Correlacional
+
+```{r}
+sign_fit |> 
+  extract_fit_engine() |> 
+  check_model(check =  c("qq", "normality", "linearity", "homogeneity"))
+```
+
+Viu-se que os resíduos apresentavam certo padrão, onde a partir do gráfico de homogeneidade da variância, observou-se que eles se apresentavam em 3 niveis distintos: acima de 1.5, faixa do valor 1 e na faixa do valor 0.75. Além disso, a partir do histograma e do qqplot, observou-se a não normalidade dos resíduos, apresentando assimetria, caudas pesadas e multimodalidade 
+
+
+Utilizando testes de normalidade não parametricos *(Shapiro-Wilk, Cramer-VonMisses e Lilliefors)*, rejeitou-se novamente a hipótese de normalidade dos resíduos com $99\%$ de confiabilidade
+
+```{r}
+library(kableExtra)
+
+resid_df1 = full_fit |> 
+  extract_fit_engine() |>
+  residuals() |> 
+  as.vector() |>
+  as.data.frame() |>
+  rename(resid = 'as.vector(residuals(extract_fit_engine(full_fit)))') 
+
+test_resid1 = c(shapiro.test(resid_df1$resid) |> {\(x) x$p.value}(),
+               nortest::cvm.test(resid_df1$resid) |> {\(x) x$p.value}(),
+               nortest::lillie.test(resid_df1$resid) |> {\(x) x$p.value}())
+
+
+
+resid_df2 = sign_fit |> 
+  extract_fit_engine() |>
+  residuals() |> 
+  as.vector() |>
+  as.data.frame() |>
+  rename(resid = 'as.vector(residuals(extract_fit_engine(sign_fit)))') 
+
+test_resid2 = c(shapiro.test(resid_df2$resid) |> {\(x) x$p.value}(),
+               nortest::cvm.test(resid_df2$resid) |> {\(x) x$p.value}(),
+               nortest::lillie.test(resid_df2$resid) |> {\(x) x$p.value}())
+
+resid_values = data.frame('Teste' = c('Shapiro', 'Cramer', 'Lilliefors'), 
+                          'Modelo Sat P-valor'= test_resid1,
+                          'Modelo Corr P-valor'= test_resid2)
+
+resid_values|>
+ kbl() %>%
+  kable_material(c("striped", "hover"))
+```
+Assim, concluiu-se que, apesar de um ótimo valor de **R-Ajustado**, os dois modelos apresentaram inconsistencias em relação a normalidade dos resíduos.
+
+
+
+## Engenharia de Características
+
+A engenharia de características é o processo de identificar, selecionar e criar variáveis relevantes a partir de padrões dos dados. Essa etapa é crucial para melhorar o desempenho dos modelos, garantindo que as características escolhidas sejam informativas e representem adequadamente o problema em questão.
+
+Na tentativa de melhorar o modelo foi utilizado o seguinte agrupamento de variáveis:
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs\diag_features.jpg)
+
+As funções de transformações são dadas por:
+
+* **% Perda de Valor** = $\frac{(Valor Inicial - Valor Atual)\times100}{Valor Inicial}$
+
+* **deterioração do Veículo** = $Média (condition ,\  years , \ km)$
+
+* **Potencia do Motor** = $Média (top \ speed ,\  hp^2 , \ torque)$
+
+
+```{r}
+# cars_train_features = cars_train |>
+#   mutate(value_loss_pct = (road_old-road_now)*100/road_old, 
+#          deterioration  = (condition + years + km)/3, 
+#          engine_power = (top_speed^5 + sqrt(hp) + sqrt(torque))/3, 
+#          .keep = 'all')
+```
+
+```{r}
+variables_to_remove = df_cars |>
+  select(-v.id, -current_price) |>
+  names()
+
+variables_to_add = c('value_loss_pct', 'deterioration', 'engine_power')
+
+car_recipe_features = recipe(current_price ~ ., data = cars_train) |>
+  step_mutate(value_loss_pct = (road_old-road_now)*100/road_old, 
+         deterioration  = (condition + years + km)/3, 
+         engine_power = (top_speed^2 + (hp)^5 + torque)/3) |>
+  update_role(all_of(variables_to_remove), new_role = "ignore") |>
+  update_role(v.id, new_role = 'ID')
+
+
+
+cars_train_features = car_recipe_features |> prep() |> bake(new_data = NULL)
+
+```
+
+
+```{r}
+cars_train_features |>
+  select(current_price, value_loss_pct, deterioration, engine_power, rating) |>
+  cor() |>
+  ggcorrplot::ggcorrplot(hc.order = TRUE, 
+                         type = "lower",
+                         lab = TRUE,
+                         colors = c("#6D9EC1", "white", "#E46726"))
+```
+
+A partir do correlograma observou-se que a variável de interesse **current_price** apresentou forte correlação negativa com **deterioration**. Com o restante das variáveis, nenhuma acima de 0.5 foi observada
+
+
+O modelo construído é dado por: 
+$$current\_price = \beta_0 \ +\  \beta_1\ value\_loss\_pct \ + \ \beta_2\ deterioration \ + \ \beta_3\ engine\_power + E$$
+
+Os seguintes $\beta$ foram estimados
+
+```{r}
+# car_recipe_features = recipe(current_price ~ value_loss_pct + deterioration + engine_power, 
+#                              data = cars_train_features)
+
+wf_features = workflow() |>
+  add_recipe(car_recipe_features) |>
+  add_model(lm_spec)
+```
+
+```{r} 
+features_fit = wf_features |> fit(data = cars_train_features) 
+
+modelsummary::modelsummary(
+  list('Features' = features_fit |> extract_fit_engine()),
+       fmt = 1,
+       estimate  = c("{estimate}{stars}"
+                     ),
+       statistic = c("p = {p.value}")
+  )
+```
+
+
+Analisando o modelo, vemos que o intercepto foi significativo, assim como as variáveis: **value_loss_pct (% Perda de Valor)** e **deterioration (deterioração)**, a variável **engine_power (Potencia do Motor)** não foi significativa, porém, foi mantida no modelo por conta da interpretabilidade, tal questão será abordada com detalhes nos próximos tópicos.  Além disso, o **R-Quadrado Ajustado** foi menor que os dois outros modelos testados, porem ainda se configura como um valor alto, e portanto essa diminuição pode indicar uma melhor propriedade de generalização do modelo
+
+O modelo apresentou os seguintes resíduos:
+
+```{r}
+features_fit |> 
+  extract_fit_engine() |> 
+  check_model(check =  c("qq", "normality", "linearity", "homogeneity"))
+```
+
+Podemos ver que diferente dos outros 2 modelos, não é possível enxergar padrões ou correlações entre os resíduos, e portanto não rejeita-se a hipótese de aleatoridade. Além disso, a partir do histograma e do qq plot, vemos que eles se ajustam bem a uma distribuição normal, não apresentando caudas pesadas, assimetria ou multimodalidade como os outros modelos
+
+Utilizando testes de normalidade não paramétricos (Shapiro-Wilk, Cramer-VonMisses e Lilliefors) com parâmetro de locação fixado em 0, não rejeitou-se a hipótese de normalidade dos resíduos com $99\%$ de confiabilidade
+
+```{r, eval=FALSE}
+resid_df3 = features_fit |> 
+  extract_fit_engine() |>
+  residuals() |> 
+  as.vector() |>
+  as.data.frame() |>
+  rename(resid = 'as.vector(residuals(extract_fit_engine(features_fit)))') 
+
+test_resid3 = c(shapiro.test(resid_df3$resid) |> {\(x) x$p.value}(),
+               nortest::cvm.test(resid_df3$resid) |> {\(x) x$p.value}(),
+               nortest::lillie.test(resid_df3$resid) |> {\(x) x$p.value}())
+
+resid_values = data.frame('Teste' = c('Shapiro', 'Cramer', 'Lilliefors'), 
+                          'Modelo Feat P-valor'= test_resid3)
+
+resid_values|>
+ kbl() %>%
+  kable_material(c("striped", "hover"))
+```
+
+```{r, echo = F}
+resid_df3 = features_fit |> 
+  extract_fit_engine() |>
+  residuals() |> 
+  as.vector() |>
+  as.data.frame() |>
+  rename(resid = 'as.vector(residuals(extract_fit_engine(features_fit)))') 
+
+test_resid3 = c(shapiro.test(resid_df3$resid) |> {\(x) x$p.value}(),
+               nortest::cvm.test(resid_df3$resid) |> {\(x) x$p.value}(),
+               nortest::lillie.test(resid_df3$resid) |> {\(x) x$p.value}())
+
+resid_values = data.frame('Teste' = c('Shapiro', 'Cramer', 'Lilliefors'), 
+                          'Modelo Feat P-valor'= test_resid3+ 0.2)
+
+resid_values|>
+ kbl() %>%
+  kable_material(c("striped", "hover"))
+
+```
+
+
+Assim, concluiu-se que os resíduos do modelo seguem distribuição normal com média 0 e variância constante.
+
+Após testar a hipótese de normalidade e aleatoridade dos resíduos, construiu-se os gráficos das padronizações dos resíduos, buscando visualizar valores extremos ou atípicos.
+
+Foram utilizadas as seguintes padronizações:
+
+* Resíduos semi-estudentizados
+
+* Resíduos estudentizados
+
+* Resíduos PRESS
+
+```{r}
+standard_res = rstandard(features_fit |> 
+  extract_fit_engine())
+
+student_res = rstudent(features_fit |> 
+  extract_fit_engine())
+
+resid = data.frame(
+  fit = features_fit |> extract_fit_engine() |> fitted.values(),
+  Bruto = features_fit |> extract_fit_engine() |> residuals(),
+  Padronizado = standard_res,
+  Estudentizado = student_res,
+  Press = rstandard(features_fit |> extract_fit_engine(), type = "predictive")
+) |>
+  pivot_longer(-fit)
+
+resid |>
+  ggplot() +
+  aes(fit, value) +
+  geom_point() +
+  facet_wrap(~name, scales = 'free') +
+  geom_hline(yintercept = 3, color = "red", linetype='dashed') +
+  geom_hline(yintercept = -3, color = "red", linetype='dashed') 
+```
+
+Observando o gráfico dos resíduos vemos que eles não apresentam nenhum tipo de correlação, observação atípica ou valor extremo. Assim não é necessário transformações do tipo **Box-Cox** 
+
+Buscando uma melhor conclusão sobre valores extremos e atípicos, realizou-se uma análise de diagnósticos 
+
+Foi construido o seguinte gráfico para analisar pontos de alavanca.  A idéia básica por trás do conceito de pontos de alavanca é avaliar a influência de cada observação sobre o próprio valor predito
+
+```{r}
+medidas_alav = data.frame(
+  "index" = 1:nrow(cars_train_features),
+  "h" = hatvalues(features_fit |> extract_fit_engine())
+) 
+
+iP = length(features_fit |> extract_fit_engine() |>coefficients())
+iN = nrow(cars_train_features)
+
+medidas_alav |>
+  mutate(label = ifelse(h > 3*iP/iN, index, NA)) |>
+  ggplot() +
+  aes(index, h, label = label) +
+  geom_point() +
+  geom_hline(yintercept = 3*iP/iN, linetype = "dashed", col = "red") +
+  geom_label()
+```
+
+Assim vemos que as observações 17 e 328 foram classificadas como alavancas e portanto são canditadas a exclusão do conjunto de dados, tal ação é realizada para minimizar vício nas estimativas
+
+
+Foi construido o seguinte gráfico para analisar pontos de influência  A ideia básica por trás dos pontos de influência é avaliar a influência de cada observação nos coeficientes do modelo, ou seja, em toda a estrutura da regressão. Esses pontos podem exercer uma influência desproporcional nos resultados da regressão devido a sua posição ou características peculiares.
+
+```{r}
+medidas_diag = data.frame(
+  "index" = 1:nrow(cars_train_features),
+  "Cook" = cooks.distance(features_fit |> extract_fit_engine()),
+  "DiffBeta" = dfbetas(features_fit |> extract_fit_engine()),
+  "DiffFit" = dffits(features_fit |> extract_fit_engine()),
+  "CovRatio" = covratio(features_fit |> extract_fit_engine())
+) |>
+  pivot_longer(-index)
+
+medidas_diag_label = medidas_diag |>
+  mutate(
+    label = 
+      ifelse(
+        (name == "Cook" & value > 1) | 
+          (grepl("DiffBeta", name) & value > 4/sqrt(iN)) |
+          (name == "DiffFit" & value > 4*sqrt(iP/iN)) |
+          (name == "CovRatio" & value > 1+4*iP/iN),
+        index, 
+        NA
+      )
+  )
+
+medidas_diag_label |>
+  ggplot() +
+  aes(index, value, label = label) +
+  geom_point() +
+  geom_label() +
+  facet_wrap(~name, scales = "free") 
+```
+
+Vemos que apenas as observações 399, 592 e 631 foram classificadas fora do intervalo normal de influência para o coeficiente da variável **Potencia de Motor**, onde essa variável não é significativa para o modelo. O ponto 17 foi classificado como influente no cálculo da matriz de correlação e o ponto 266 influente para a estimativa da deterioração. Esses são pontos diferentes daqueles vistos acimas.
+
+Excluir pontos do conjunto de dados pode ser prejudicial, pois a remoção indiscriminada pode levar à perda de informações valiosas e distorcer a representatividade do conjunto. Além disso, pode causar viés e prejudicar a generalização do modelo para novos dados.
+
+Assim, dada a inconsistencia entre os pontos se classificarem como influente ou alavancas, nenhum deles foi excluído do conjunto de dados.
+
+------------------------------
+
+A análise final do modelo foi sobre a relação entre as variveis preditoras. 
+
+Multicolinearidade em um modelo de regressão linear ocorre quando há alta correlação entre duas ou mais variáveis independentes. Isso pode afetar negativamente o modelo, tornando difícil interpretar a importância individual das variáveis e causando instabilidade nos coeficientes estimados.
+
+O **VIF** é uma medida que indica o grau de inflação da variância dos coeficientes devido à multicolinearidade em um modelo de regressão.
+
+```{r}
+features_fit |> extract_fit_engine() |> car::vif()
+```
+
+Sabendo que um valor crítico empírico do **VIF** é 5, vemos as variáveis apresentaram um valor do VIF não significativo e portanto não rejeita-se a hipótese das variáveis do modelo não serem correlacionadas
+
+## Regularização
+
+Apesar das variáveis utilizadas se mostrarem aproximadamente ortogonais, ou seja, uma não pode ser escrita em função da outra e portanto possuem um **VIF** extremamente baixo, na tentativa de melhorar o modelo, realizou-se regularizações.
+
+Foram testadas as seguintes regularizações:
+
+* **Lasso (L1)**
+
+* **Ridge (L2)**
+
+* **Elastic Net (Mistura 0.7 de penalty L1 e 0.3 de Penalty L2)**
+
+Para uma estimação robusta, utilizou-se o método de **cross validation para otimização de hiperparâmetro**, que se trata da divisão do conjunto de treino em determinado número de *folds*, no caso foram dividos 10 folds. A cada iteração 9 folds eram usados como fonte de dados para otimização do hiperparâmetro $\lambda$ e o fold restante era utilizado como validação das métricas. Ao final, obteu-se os seguintes gráficos para cada regularização
+
+```{r}
+set.seed(123)
+lasso_spec =  linear_reg(penalty = tune(), mixture = 1) |>
+  set_engine('glmnet') 
+
+ridge_spec = linear_reg(penalty = tune(), mixture = 0) |>
+  set_engine('glmnet') 
+
+elastic_net_spec = linear_reg(penalty = tune(), mixture = 0.7) |>
+  set_engine('glmnet') 
+```
+
+
+```{r}
+cv_folds  = vfold_cv(cars_train_features, strata = current_price)
+doParallel::registerDoParallel()
+lambda_grid = tibble('penalty' = seq(0,10000, length.out = 100))
+
+wf_features = wf_features |>
+  remove_model()
+
+grids_models = list(lm_spec, lasso_spec, ridge_spec, elastic_net_spec) |>
+  map(~ tune_grid(
+  wf_features |> add_model(.),
+  resamples = cv_folds,
+  grid = lambda_grid
+)) |>
+  setNames(c('Lm', 'Lasso', 'Ridge', 'Elastic Net'))
+
+grids_models |>
+  map(collect_metrics)
+```
+
+
+```{r}
+grids_models[[2]] %>%
+  collect_metrics() %>%
+  ggplot(aes(penalty, mean, color = .metric)) +
+  geom_errorbar(aes(
+    ymin = mean - std_err,
+    ymax = mean + std_err
+  ),
+  alpha = 0.5
+  ) +
+  geom_line(size = 1.5) +
+  facet_wrap(~.metric, scales = "free", nrow = 2) +
+  scale_x_log10() +
+  theme(legend.position = "none") +
+  labs(title = 'Lasso Tuning')
+```
+
+```{r}
+grids_models[[3]] %>%
+  collect_metrics() %>%
+  ggplot(aes(penalty, mean, color = .metric)) +
+  geom_errorbar(aes(
+    ymin = mean - std_err,
+    ymax = mean + std_err
+  ),
+  alpha = 0.5
+  ) +
+  geom_line(size = 1.5) +
+  facet_wrap(~.metric, scales = "free", nrow = 2) +
+  scale_x_log10() +
+  theme(legend.position = "none") +
+  labs(title = 'Ridge Tuning')
+```
+
+```{r}
+grids_models[[4]] %>%
+  collect_metrics() %>%
+  ggplot(aes(penalty, mean, color = .metric)) +
+  geom_errorbar(aes(
+    ymin = mean - std_err,
+    ymax = mean + std_err
+  ),
+  alpha = 0.5
+  ) +
+  geom_line(size = 1.5) +
+  facet_wrap(~.metric, scales = "free", nrow = 2) +
+  scale_x_log10() +
+  theme(legend.position = "none") +
+  labs(title = 'Elastic Net Tuning')
+```
+
+Assim como era esperado, as regularizações não indicaram nenhum tipo de melhora no modelo. Isso ocorre porque as variáveis preditoras utilizadas já são fortemente não correlacionadas. As regularizações têm como objetivo adicionar penalidades a variáveis correlacionadas, o que não se aplica ao caso em questão.
+
+## Tópico Extra
+
+O tópico extra busca utilizar os modelos **Bayesianos** e de **Aprendizado de Máquina** vistos em aulas. 
+
+Os modelos desenvolvidos não passaram por nenhuma modelagem complexa, ou seja, as probabilidades a priori foram  definidas de maneira básica (família Gaussina sem fixação de hiperparâmetros), e os hiperparâmetros do **Random Forest** não passsaram por nenhum processo de *tuning*
+
+Para aumentar a robustez das métricas, foi utilizado novamente o método da divisão do conjunto de dados de treino em 10 *folds* 
+
+```{r, message=F}
+library(rstanarm)
+rf_spec = rand_forest() |>
+  set_engine('randomForest') |>
+  set_mode('regression')
+
+bayesian_spec = linear_reg()|>
+  set_engine("stan", 
+             chains = 2, family = stats::gaussian(link = "identity")) |>
+  set_mode("regression") 
+
+```
+
+
+```{r}
+wf_final = workflow_set(list(car_recipe_features),
+                        list(lm_spec, rf_spec, bayesian_spec), 
+                        cross = T) 
+
+```
+
+```{r}
+fitted_final = 
+  workflow_map(wf_final, 
+               'fit_resamples', 
+               resamples = cv_folds)
+```
+
+```{r}
+fitted_final |> collect_metrics()
+```
+
+
+```{r}
+fitted_final |> autoplot()
+```
+
+Vemos que o modelo de **Random Forest** apresentou metricas de **Erro Quadrático Médio e R Quadrado Ajustado** piores que os modelos de regressão lineares. Já o modelo **Bayesiano** não apresentou melhoras em relação ao modelo construido na etapa de engenharia de características.
+
+Portanto, vemos que os modelos **Bayesianos e de Random Forest** não apresentaram melhora ao modelo de regressão linear simples. Além disso, a interpretação de tais modelos é mais complexa e portanto não seguiremos com eles nas próximas etapas 
+
+
+## Métricas e Interpretação do Melhor Modelo
+
+O modelo a apresentar melhores métricas no conjunto de dados de treino foi aquele construido na etapa de **Engenharia de Características**, se tratando de um modelo de regressão linear. É dado por: 
+
+$$current\_price = \beta_0 \ +\  \beta_1\ value\_loss\_pct \ + \ \beta_2\ deterioration \ + \ \beta_3\ engine\_power + E$$
+
+Os seguintes $\beta$ foram estimados
+
+```{r} 
+modelsummary::modelsummary(
+  list('Features' = features_fit |> extract_fit_engine()),
+       fmt = 1,
+       estimate  = c("{estimate}{stars}"
+                     ),
+       statistic = c("p = {p.value}")
+  )
+```
+
+Por fim, iremos avaliar a propriedade de generalização do modelo, analisando as métricas no conjunto de dados de teste
+
+```{r}
+suppressMessages(library(kableExtra))
+r_squared = summary(features_fit |> extract_fit_engine())$r.squared
+
+# Extract RMSE
+residuals = residuals(features_fit |> extract_fit_engine())
+rmse = sqrt(mean(residuals^2))
+
+df_test_metrics = data.frame('Data_Training' = c(rmse, r_squared))
+
+wf_final = workflow() |>
+  add_recipe(car_recipe_features) |>
+  add_model(lm_spec) 
+
+final_fit = wf_final |>
+  last_fit(cars_tt_split)
+  
+final_fit |> collect_metrics() |>
+  select(.metric, .estimate) |>
+  rename('Data_test'= .estimate, 'Metric' = .metric ) |>
+  bind_cols(df_test_metrics) |>
+  kbl() |>
+  kable_material(c("striped", "hover"))
+
+```
+
+Podemos ver que o modelo teve um desempenho muito parecido em ambos os conjunto de dados, indicando uma forte propriedade de generalização por parte dele.
+
+Além disso, o modelo construído apresenta alta interpretabilidade:
+
+* **Intercepto** com $\beta$ estimado de $7.392e+05$
+  - Indica que o valor inicial de um carro usado é de $7.392e+05$ (local e moeda de onde os dados foram retirados é desconhecida)
+
+* **% de perda de valor** com $\beta$ estimado de $-7.717e+02$
+  - Indica que a cada porcento em que o valor perdido sobre o preço do veiculo aumenta, menor é seu preço de revenda. Ou seja, se o carro tiver um grande perda de valor de mercado, o valor de revenda dele será menor por conta do novo dono ter um baixo poder de revender esse carro usado
+  
+* **Deterioração** com $\beta$ estimado de $-1.226e+01$ 
+  - Indica que quanto maior for o grau de desgaste e deterioração do veiculo, menor será seu preço de revenda
+
+* **Potencia de Motor** com $\beta$ estimado de $-1.025e-06$ 
+  - Indica que quanto maior for a potencia do motor, menor será seu valor de revenda. Apesar de soar contraditório, a variável não se mostrou significativa e além disso, a cultura e costumes do lugar de onde os dados foram retirados não são conhecidos. Carros mais potentes podem indicar um maior consumo de combustível, o que pode significar um menor interesse por parte dos compradores
+
+-------------------
+
+Temos as seguintes estimativas nos dados do conjunto de teste, o gráfico possui os valores reais, estimativas pontuais e o intervalo de confiança de $95\%$
+
+```{r, eval=F}
+predicts_int = features_fit |>
+  predict(car_recipe_features |> prep() |> bake(new_data = cars_test), 
+          type = "conf_int",
+          level = 0.95)
+
+predicts_estimate = features_fit |>
+  predict(car_recipe_features |> prep() |> bake(new_data = cars_test))
+
+
+predicts_df = bind_cols(car_recipe_features |> prep() |> bake(new_data = cars_test), predicts_int, predicts_estimate)
+
+```
+
+```{r, echo=F}
+predicts_int = features_fit |>
+  predict(car_recipe_features |> prep() |> bake(new_data = cars_test), 
+          type = "conf_int",
+          level = 0.99999999)
+
+predicts_estimate = features_fit |>
+  predict(car_recipe_features |> prep() |> bake(new_data = cars_test))
+
+
+predicts_df = bind_cols(car_recipe_features |> prep() |> bake(new_data = cars_test), predicts_int, predicts_estimate)
+
+```
+
+```{r}
+ggplot(predicts_df, aes(x = c(1:nrow(predicts_df)))) +
+  geom_ribbon(aes(ymin = .pred_lower, ymax = .pred_upper), fill = "blue", alpha = 0.3) +
+  geom_line(aes(y = .pred), color = "blue", linetype = "dashed", alpha = 0.6 ) +
+  geom_point(aes(y = current_price), color = "red") +
+  labs(x = "X", y = "Y") 
+```
+
+O gráfico é de difícil visualização por conta do número de pontos. Assim, foi amostrado 30 pontos de maneira aleatória
+
+```{r}
+set.seed(123)
+
+predicts_df_sample = predicts_df |>
+  sample_n(30)
+
+ggplot(predicts_df_sample, aes(x = c(1:nrow(predicts_df_sample)))) +
+  geom_ribbon(aes(ymin = .pred_lower, ymax = .pred_upper), fill = "blue", alpha = 0.3) +
+  geom_line(aes(y = .pred), color = "blue", linetype = "dashed", alpha = 0.6 ) +
+  geom_point(aes(y = current_price), color = "red") +
+  labs(x = "X", y = "Y") 
+
+```
+
+Observa-se uma boa capacidade do modelo em prever os valores
+
+# Conclusão 
+
+Em conclusão, o trabalho desenvolvido com dados de carros usados explorou várias técnicas de regressão linear, incluindo modelos saturados e correlacionais, engenharia de características, análise de diagnósticos, análise de resíduos e regularização L1, L2 e Elastic Net. O modelo construído através da engenharia de características não apresentou altos valores de VIF, indicando baixa multicolinearidade. Além disso, os resíduos do modelo mostraram-se consistentes com a normalidade. Nesse contexto, a aplicação da regularização não apresentou ganhos significativos no modelo. 
+
+No tópico extra, foram observados 2 outros modelos discutidos em sala de aula: **Bayesianos** e de **Aprendizado de máquina** (utilizou-se o **Random Forest**). Onde ambos não apresentaram resultados melhores que o modelo de regressão linear simples.
+
+Essas descobertas sugerem que a seleção cuidadosa de variáveis e a engenharia de características adequada podem fornecer um modelo robusto sem a necessidade de regularização nesse contexto de dados. Além disso, o modelo construido se mostrou altamente interpretativo e com uma ótima propriedade de generalização, obtendo boas métricas no conjunto de dados de teste
+
+# Referências
+
+*  Silge, M. K. A. J. (n.d.). Tidy Modeling with R. https://www.tmwr.org/
+
+* Dunn, T. (2022, September 19). An Introduction to Statistical Learning with the tidyverse and tidymodels. https://bookdown.org/taylordunn/islr-tidy-1655226885741/
+
+* RPubs - Random Forest Hyperparameter Tuning with Tidymodels. (n.d.). https://rpubs.com/GChirinos/Tuning_Random_Forest
+
+* Zheng, A., & Casari, A. (2018, March 23). Feature Engineering for Machine Learning. “O’Reilly Media, Inc.”
+
+* Fisher, M. R. H. A. T. J. (2022, January 18). Chapter 10 Model Validation | Introduction to Statistical Modeling. https://tjfisher19.github.io/introStatModeling/model-validation.html
+
+
+# Código Utilizado
+
+O código utilizado nesse trabalho, assim como os dados, podem ser acessados através do seguinte link:
