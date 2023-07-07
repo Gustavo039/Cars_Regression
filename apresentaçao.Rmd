@@ -1,0 +1,241 @@
+---
+title: "Análise e Modelagem de Preços de Carros Usados"
+author: "Gustavo Almeida Silva"
+institute: "Universidade Federal de Juiz de Fora"
+date: "07/07/2023"
+output: 
+  beamer_presentation:
+    latex_engine: xelatex
+    incremental: false
+    theme: "Madrid"
+    
+  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, warning = F, message = F)
+```
+
+# O Mercado de Carros Usados
+
+* Acessibilidade
+
+* Sustentabilidade
+
+# Dados Utilizados
+
+## 12 variáveis e 1000 observações
+
+* **v.id** 
+
+* **road_old**
+
+* **road_now**
+
+* **years**
+
+* **km**
+
+* **rating**
+
+* **condition**
+
+* **economy**
+
+* **top_speed**
+
+* **hp**
+
+* **torque**
+
+* **current_price**
+
+# Separação e Análise Exploratória dos Dados
+
+* Divisão Treino e Teste (0.75, 0.25)
+
+* Ausência de Valores Faltantes
+
+
+
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\correlograma1.png){width=70%}
+
+------------------
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\plot1.png){width=70%}
+
+------------------
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\plot2.png){width=70%}
+
+# Modelos
+
+* Saturado
+
+* Correlacional
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\sum_full.png){width=70%}
+
+------------------------
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\sum_full2.png){width=70%}
+
+# Residuos
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\resid_full.png){width=100%}
+
+------------------------
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\resid_corr.png){width=100%}
+
+---------------------
+
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\norm_test.png){width=100%}
+
+---------------
+
+* Rejeição da Hipótese de Normalidade
+
+* Heterogeneidade da Variância
+
+# Engenharia de Características
+
+* Criação de novas variáveis via transformação
+
+* Tentativa de melhorar o modelo
+
+-----------------
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\eng_carac.png){width=100%}
+
+--------------------
+
+Transformações utilizadas
+
+* **% Perda de Valor** = $\frac{(Valor Inicial - Valor Atual)\times100}{Valor Inicial}$
+
+* **Deterioração do Veículo** = $Media (condition ,\  years , \ km)$
+
+* **Potencia do Motor** = $Media (top \ speed ^2 ,\  hp^5 , \ torque)$
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\correlograma2.png){width=70%}
+
+-----------------
+
+
+ * Modelo: $current\_price = \beta_0 \ +\  \beta_1\ value\_loss\_pct \ + \ \beta_2\ deterioration \ + \ \beta_3\ engine\_power + E$
+ 
+-----------------
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\sum_features.png){width=100%}
+
+-------------------
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\resid_feat.png){width=100%}
+
+-----------------
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\norm_test_feat.png){width=100%}
+
+------------------
+
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\resid_plot.png){width=100%}
+
+# Análise de Diagnósticos
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\alavanca.png){width=100%}
+
+------------------------------
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\influencia.png){width=100%}
+
+-------------------------
+
+## Multicolinearidade
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\vif.png){width=100%}
+
+# Regularização
+
+* Busca penalizar variávies colineares
+
+* Modelo não apresenta multicolinearidade, e portanto não espera-se melhora
+
+* K-fold e Leave One Out para robuste de métricas
+
+
+* **Lasso (L1)**
+
+* **Ridge (L2)**
+
+* **Elastic Net (Mistura 0.7 de penalty L1 e 0.3 de Penalty L2)**
+
+------------
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\lasso.png){width=100%}
+
+---------------
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\ridge.png){width=100%}
+
+----------------
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\net.png){width=100%}
+
+# Tópico extra
+
+* Assuntos Comentados em Aula
+
+* Modelo Bayesiano (família Gaussina sem fixação de hiperparâmetros)
+
+* Aprendizado de Máquina (Random Forest sem tuning de hiperparâmetros)
+
+* K-fold e Leave One Out para robuste de métricas
+
+-----------
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\extra.png){width=100%}
+
+-----------
+
+* Métricas iguais e piores do que o modelo linear simples
+
+* Complexidade de Interpretação
+
+# Validação
+
+* Melhor Modelo: $current\_price = \beta_0 \ +\  \beta_1\ value\_loss\_pct \ + \ \beta_2\ deterioration \ + \ \beta_3\ engine\_power + E$
+
+-----------
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\sum_features.png){width=100%}
+
+----------------
+
+## Validação no Conjunto de Teste
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\test_metric.png){width=100%}
+
+-----------------
+
+## Valores Preditos
+
+![](D:\UFJF_materias\Regressao\TVCs\tvc2\figs_apre\preditc_plot.png){width=100%}
+
+
+
+# Conclusão 
+
+* O trabalho utilizou técnicas de regressão linear, como modelos saturados e correlacionais, engenharia de características, análise de diagnósticos e análise de resíduos
+
+* Os resíduos do modelo  não rejeitaram a hipótese de normalidade, o que indica um bom ajuste.
+ 
+* A engenharia de características permitiu criar um modelo com baixa multicolinearidade, conforme indicado pelos baixos valores de VIF
+
+* A aplicação de regularização (L1, L2 e Elastic Net) não trouxe melhorias significativas ao modelo.
+
+* Comparando com outros modelos, como os Bayesianos e Random Forest, o modelo de regressão linear simples obteve resultados melhores e uma boa capacidade de generalização.
+

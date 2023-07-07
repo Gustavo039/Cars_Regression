@@ -2791,7 +2791,7 @@ border: 0;
   <li><a href="#métricas-e-interpretação-do-melhor-modelo" id="toc-métricas-e-interpretação-do-melhor-modelo" class="nav-link" data-scroll-target="#métricas-e-interpretação-do-melhor-modelo"><span class="toc-section-number">4.5</span>  Métricas e Interpretação do Melhor Modelo</a></li>
   </ul></li>
   <li><a href="#conclusão" id="toc-conclusão" class="nav-link" data-scroll-target="#conclusão"><span class="toc-section-number">5</span>  Conclusão</a></li>
-  <li><a href="#referências" id="toc-referências" class="nav-link" data-scroll-target="#referências"><span class="toc-section-number">6</span>  Referências</a></li>
+  <li><a href="#bibliografia" id="toc-bibliografia" class="nav-link" data-scroll-target="#bibliografia"><span class="toc-section-number">6</span>  Bibliografia</a></li>
   <li><a href="#código-utilizado" id="toc-código-utilizado" class="nav-link" data-scroll-target="#código-utilizado"><span class="toc-section-number">7</span>  Código Utilizado</a></li>
   </ul>
 </nav>
@@ -3176,7 +3176,7 @@ Attaching package: &#39;kableExtra&#39;</code></pre>
 <ul>
 <li><p><strong>% Perda de Valor</strong> = <span class="math inline">\(\frac{(Valor Inicial - Valor Atual)\times100}{Valor Inicial}\)</span></p></li>
 <li><p><strong>deterioração do Veículo</strong> = <span class="math inline">\(Média (condition ,\  years , \ km)\)</span></p></li>
-<li><p><strong>Potencia do Motor</strong> = <span class="math inline">\(Média (top \ speed ,\  hp^2 , \ torque)\)</span></p></li>
+<li><p><strong>Potencia do Motor</strong> = <span class="math inline">\(Média (top \ speed ^2 ,\  hp^5 , \ torque)\)</span></p></li>
 </ul>
 <div class="cell">
 
@@ -3347,9 +3347,31 @@ Attaching package: &#39;kableExtra&#39;</code></pre>
 <p>Multicolinearidade em um modelo de regressão linear ocorre quando há alta correlação entre duas ou mais variáveis independentes. Isso pode afetar negativamente o modelo, tornando difícil interpretar a importância individual das variáveis e causando instabilidade nos coeficientes estimados.</p>
 <p>O <strong>VIF</strong> é uma medida que indica o grau de inflação da variância dos coeficientes devido à multicolinearidade em um modelo de regressão.</p>
 <div class="cell">
-<div class="cell-output cell-output-stdout">
-<pre><code>value_loss_pct  deterioration   engine_power 
-      1.000291       1.008632       1.008797 </code></pre>
+<div class="cell-output-display">
+
+<table class=" lightable-material lightable-striped lightable-hover" style="font-family: &quot;Source Sans Pro&quot;, helvetica, sans-serif; margin-left: auto; margin-right: auto;">
+ <thead>
+  <tr>
+   <th style="text-align:left;">   </th>
+   <th style="text-align:right;"> VIF_Values </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> value_loss_pct </td>
+   <td style="text-align:right;"> 1.000291 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> deterioration </td>
+   <td style="text-align:right;"> 1.008633 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> engine_power </td>
+   <td style="text-align:right;"> 1.008797 </td>
+  </tr>
+</tbody>
+</table>
+
 </div>
 </div>
 <p>Sabendo que um valor crítico empírico do <strong>VIF</strong> é 5, vemos as variáveis apresentaram um valor do VIF não significativo e portanto não rejeita-se a hipótese das variáveis do modelo não serem correlacionadas</p>
@@ -3634,8 +3656,8 @@ $`Elastic Net`
 <p>No tópico extra, foram observados 2 outros modelos discutidos em sala de aula: <strong>Bayesianos</strong> e de <strong>Aprendizado de máquina</strong> (utilizou-se o <strong>Random Forest</strong>). Onde ambos não apresentaram resultados melhores que o modelo de regressão linear simples.</p>
 <p>Essas descobertas sugerem que a seleção cuidadosa de variáveis e a engenharia de características adequada podem fornecer um modelo robusto sem a necessidade de regularização nesse contexto de dados. Além disso, o modelo construido se mostrou altamente interpretativo e com uma ótima propriedade de generalização, obtendo boas métricas no conjunto de dados de teste</p>
 </section>
-<section id="referências" class="level1" data-number="6">
-<h1 data-number="6"><span class="header-section-number">6</span> Referências</h1>
+<section id="bibliografia" class="level1" data-number="6">
+<h1 data-number="6"><span class="header-section-number">6</span> Bibliografia</h1>
 <ul>
 <li><p>Silge, M. K. A. J. (n.d.). Tidy Modeling with R. https://www.tmwr.org/</p></li>
 <li><p>Dunn, T. (2022, September 19). An Introduction to Statistical Learning with the tidyverse and tidymodels. https://bookdown.org/taylordunn/islr-tidy-1655226885741/</p></li>
